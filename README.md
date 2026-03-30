@@ -1,1 +1,1 @@
-# CAPADS-Neutron-Detection-with-Silicon-Carbide-Research-Simulations-and-Plots
+# CAPADS-Neutron-and-Alpha-Detection-with-Silicon-Carbide-Research-Simulations-and-Plots
