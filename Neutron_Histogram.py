@@ -5,6 +5,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.colors import LogNorm
 
 
 # get the neutron source energy from the name of the csv file
@@ -76,24 +77,14 @@ def main():
     parser.add_argument(
         "--xmax",
         type=float,
-        default=2000.0,
+        default=10000.0,
         help="Maximum deposited energy (keV) to include.",
     )
     parser.add_argument(
         "--bin-width",
         type=float,
         default=100.0,
-        help="Deposited energy bin width in keV (default: 1000).",
-    )
-    parser.add_argument(
-        "--logz",
-        action="store_true",
-        help="Use log scale on counts (color scale).",
-    )
-    parser.add_argument(
-        "--grid",
-        action="store_true",
-        help="Draw grid lines at bin boundaries (off by default).",
+        help="Deposited energy bin width in keV.",
     )
     parser.add_argument(
         "--title",
@@ -128,8 +119,8 @@ def main():
 
     items.sort(key=lambda t: t[0])
 
-    xmin = args.xmin  # minimum neutron source energy plotted
-    xmax = args.xmax  # maximum neutron source energy plotted
+    xmin = args.xmin  # minimum deposited energy plotted
+    xmax = args.xmax  # maximum deposited energy plotted
     bin_width = args.bin_width  # size of the grid
     edges = np.arange(xmin, xmax + bin_width, bin_width)
     bin_centers = (edges[:-1] + edges[1:]) / 2.0
@@ -149,49 +140,39 @@ def main():
             if xc < xmin or xc >= xmax:
                 continue
             bin_index = int((xc - xmin) // bin_width)
+            # add up all the counts from the source energy
             counts_matrix[energy_to_idx[energy], bin_index] += yc
 
     fig, ax = plt.subplots(figsize=(9, 6))
-    # create the z vector
     z = counts_matrix.T
-    if args.logz:
-        z = np.where(z > 0, z, np.nan)
-        im = ax.imshow(
-            np.log10(z),
-            origin="lower",
-            aspect="auto",
-            interpolation="nearest",
-            extent=[energies_sorted[0], energies_sorted[-1], xmin, xmax],
+    z = np.where(z > 0, z, np.nan)
+
+    energy_centers = np.asarray(energies_sorted, dtype=float)
+    if energy_centers.size == 1:
+        half_step = 0.5
+        energy_edges = np.array(
+            [energy_centers[0] - half_step, energy_centers[0] + half_step]
         )
-        cbar = fig.colorbar(im, ax=ax)
-        cbar.set_label("log10(Counts)")
     else:
-        im = ax.imshow(
-            z,
-            origin="lower",
-            aspect="auto",
-            interpolation="nearest",
-            extent=[energies_sorted[0], energies_sorted[-1], xmin, xmax],
-        )
-        cbar = fig.colorbar(im, ax=ax)
-        cbar.set_label("Counts")
+        energy_steps = np.diff(energy_centers)
+        energy_edges = np.empty(energy_centers.size + 1, dtype=float)
+        energy_edges[1:-1] = energy_centers[:-1] + energy_steps / 2.0
+        energy_edges[0] = energy_centers[0] - energy_steps[0] / 2.0
+        energy_edges[-1] = energy_centers[-1] + energy_steps[-1] / 2.0
+
+    mesh = ax.pcolormesh(
+        energy_edges,
+        edges,
+        z,
+        shading="auto",
+        norm=LogNorm(),
+    )
+    cbar = fig.colorbar(mesh, ax=ax)
+    cbar.set_label("Counts (log scale)")
 
     ax.set_xlabel("Source Energy (MeV)")
     ax.set_ylabel("Deposited Energy (keV)")
     ax.set_title(args.title)
-    if args.grid:
-        # Grid lines to show deposited-energy bin boundaries
-        y_edges = np.arange(xmin, xmax + bin_width, bin_width)
-        for y in y_edges:
-            ax.axhline(y, color="white", linewidth=0.5, alpha=0.5)
-        # Grid lines to show source-energy steps
-        if len(energies_sorted) > 1:
-            x_edges = [
-                (energies_sorted[i] + energies_sorted[i + 1]) / 2.0
-                for i in range(len(energies_sorted) - 1)
-            ]
-            for x in x_edges:
-                ax.axvline(x, color="white", linewidth=0.5, alpha=0.5)
 
     fig.tight_layout()
     fig.savefig(args.out, dpi=160)
